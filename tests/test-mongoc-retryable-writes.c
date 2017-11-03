@@ -499,9 +499,20 @@ check_outcome_collection (mongoc_collection_t *collection, bson_t *test)
       bson_iter_bson (&iter, &expected_doc);
       ASSERT_CURSOR_NEXT (cursor, &actual_doc);
       ASSERT (match_bson (actual_doc, &expected_doc, false));
+
+      printf ("EXPECTED: %s\n", bson_as_json(actual_doc, NULL)); fflush(stdout);
    }
 
-   // ASSERT_CURSOR_DONE (cursor);
+   while (mongoc_cursor_more (cursor)) {
+      const bson_t *actual_doc;
+
+      mongoc_cursor_next (cursor, &actual_doc);
+      if (actual_doc) {
+         printf ("EXTRA:    %s\n", bson_as_json(actual_doc, NULL)); fflush(stdout);
+      }
+   }
+
+   //ASSERT_CURSOR_DONE (cursor);
 }
 
 
