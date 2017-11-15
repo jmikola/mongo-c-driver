@@ -5,6 +5,9 @@
 
 #include "json-test.h"
 #include "test-libmongoc.h"
+#include "mock_server/mock-rs.h"
+#include "mock_server/future.h"
+#include "mock_server/future-functions.h"
 
 
 static int
@@ -500,7 +503,8 @@ check_outcome_collection (mongoc_collection_t *collection, bson_t *test)
       ASSERT_CURSOR_NEXT (cursor, &actual_doc);
       ASSERT (match_bson (actual_doc, &expected_doc, false));
 
-      printf ("EXPECTED: %s\n", bson_as_json(actual_doc, NULL)); fflush(stdout);
+      printf ("EXPECTED: %s\n", bson_as_json (actual_doc, NULL));
+      fflush (stdout);
    }
 
    while (mongoc_cursor_more (cursor)) {
@@ -508,11 +512,12 @@ check_outcome_collection (mongoc_collection_t *collection, bson_t *test)
 
       mongoc_cursor_next (cursor, &actual_doc);
       if (actual_doc) {
-         printf ("EXTRA:    %s\n", bson_as_json(actual_doc, NULL)); fflush(stdout);
+         printf ("EXTRA:    %s\n", bson_as_json (actual_doc, NULL));
+         fflush (stdout);
       }
    }
 
-   //ASSERT_CURSOR_DONE (cursor);
+   // ASSERT_CURSOR_DONE (cursor);
 }
 
 
@@ -652,6 +657,72 @@ test_retryable_writes_cb (bson_t *scenario)
 }
 
 
+/* "Replica Set Failover Test" from Retryable Writes Spec */
+static void
+test_rs_failover (void)
+{
+   mock_rs_t *rs;
+   mongoc_uri_t *uri;
+   mongoc_client_t *client;
+   mongoc_collection_t *collection;
+   mongoc_client_session_t *cs;
+   bson_t opts = BSON_INITIALIZER;
+   future_t *future;
+   request_t *request;
+   bson_error_t error;
+
+   rs = mock_rs_with_autoismaster (WIRE_VERSION_OP_MSG,
+                                   true /* has primary */,
+                                   2 /* secondaries */,
+                                   0 /* arbiters */);
+
+   mock_rs_run (rs);
+   uri = mongoc_uri_copy (mock_rs_get_uri (rs));
+   mongoc_uri_set_option_as_bool (uri, "retryWrites", true);
+   client = mongoc_client_new_from_uri (uri);
+   collection = mongoc_client_get_collection (client, "db", "collection");
+   cs = mongoc_client_start_session (client, NULL, &error);
+   ASSERT_OR_PRINT (cs, error);
+   ASSERT_OR_PRINT (mongoc_client_session_append (cs, &opts, &error), error);
+
+   /* initial insert triggers replica set discovery */
+   future = future_collection_insert_one (
+      collection, tmp_bson ("{}"), &opts, NULL, &error);
+   request =
+      mock_rs_receives_msg (rs, 0, tmp_bson ("{'insert': 'collection'}"));
+   mock_server_replies_ok_and_destroys (request);
+   BSON_ASSERT (future_get_bool (future));
+   future_destroy (future);
+
+   /* failover */
+   mock_rs_stepdown (rs);
+   mock_rs_elect (rs, 1 /* server id */);
+
+   /* insert receives "not master" from old primary, reselects and retries */
+   future = future_collection_insert_one (
+      collection, tmp_bson ("{}"), &opts, NULL, &error);
+
+   request =
+      mock_rs_receives_msg (rs, 0, tmp_bson ("{'insert': 'collection'}"));
+   BSON_ASSERT (mock_rs_request_is_to_secondary (rs, request));
+   mock_server_replies_simple (request, "{'ok': 0, 'errmsg': 'not master'}");
+   request_destroy (request);
+
+   request =
+      mock_rs_receives_msg (rs, 0, tmp_bson ("{'insert': 'collection'}"));
+   BSON_ASSERT (mock_rs_request_is_to_primary (rs, request));
+   mock_server_replies_ok_and_destroys (request);
+   BSON_ASSERT (future_get_bool (future));
+   future_destroy (future);
+
+   bson_destroy (&opts);
+   mongoc_client_session_destroy (cs);
+   mongoc_collection_destroy (collection);
+   mongoc_client_destroy (client);
+   mongoc_uri_destroy (uri);
+   mock_rs_destroy (rs);
+}
+
 /*
  *-----------------------------------------------------------------------
  *
@@ -675,4 +746,6 @@ void
 test_retryable_writes_install (TestSuite *suite)
 {
    test_all_spec_tests (suite);
+   TestSuite_AddMockServerTest (
+      suite, "/retryable_writes/failover", test_rs_failover);
 }
