@@ -2971,14 +2971,9 @@ mongoc_collection_find_and_modify_with_opts (
       }
    }
 
-   /* retryable writes option is inherited from the client */
-   is_retryable = mongoc_uri_get_option_as_bool (
-      collection->client->uri, MONGOC_URI_RETRYWRITES, false);
-
    mongoc_cmd_parts_init (
       &parts, collection->client, collection->db, MONGOC_QUERY_NONE, &command);
    parts.is_write_command = true;
-   parts.is_retryable_write = is_retryable;
 
    if (bson_iter_init (&iter, &opts->extra)) {
       bool ok = mongoc_cmd_parts_append_opts (

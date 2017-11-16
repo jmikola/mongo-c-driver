@@ -62,7 +62,9 @@ typedef struct _mongoc_cmd_parts_t {
    bson_t assembled_body;
    bool is_write_command;
    bool prohibit_lsid;
+   bool prohibit_txnnumber;
    bool is_retryable_write;
+   bool has_implicit_session;
    mongoc_client_t *client;
 } mongoc_cmd_parts_t;
 

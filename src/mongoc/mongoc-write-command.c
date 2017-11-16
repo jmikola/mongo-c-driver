@@ -127,6 +127,7 @@ _mongoc_write_command_update_append (mongoc_write_command_t *command,
    if (opts) {
       bson_concat (&document, opts);
       command->flags.has_collation |= bson_has_field (opts, "collation");
+      command->flags.has_multi_write |= _mongoc_lookup_bool (opts, "multi");
    }
 
    _mongoc_buffer_append (
@@ -158,6 +159,7 @@ _mongoc_write_command_delete_append (mongoc_write_command_t *command,
    if (opts) {
       bson_concat (&document, opts);
       command->flags.has_collation |= bson_has_field (opts, "collation");
+      command->flags.has_multi_write |= !_mongoc_lookup_bool (opts, "limit");
    }
 
    _mongoc_buffer_append (
@@ -431,6 +433,14 @@ _mongoc_write_opmsg (mongoc_write_command_t *command,
       bson_destroy (&cmd);
       mongoc_cmd_parts_cleanup (&parts);
       EXIT;
+   }
+
+   parts->retry_writes = mongoc_uri_get_option_as_bool (
+      client->uri, MONGOC_URI_RETRYWRITES, false);
+
+   /* Write commands including multi-document operations cannot be retried */
+   if (command->flags.has_multi_write) {
+      parts->prohibit_txn_number = true;
    }
 
    if (!mongoc_cmd_parts_assemble (&parts, server_stream, error)) {
