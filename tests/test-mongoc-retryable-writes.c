@@ -743,6 +743,8 @@ void
 test_retryable_writes_install (TestSuite *suite)
 {
    test_all_spec_tests (suite);
-   TestSuite_AddMockServerTest (
-      suite, "/retryable_writes/failover", test_rs_failover);
+   TestSuite_AddMockServerTest (suite,
+                                "/retryable_writes/failover",
+                                test_rs_failover,
+                                test_framework_skip_if_no_crypto);
 }
