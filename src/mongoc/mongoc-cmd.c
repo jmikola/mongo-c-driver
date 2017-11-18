@@ -459,7 +459,7 @@ _largest_cluster_time (const bson_t *a, const bson_t *b)
  * retryable if executed via mongoc_client_write_command_with_opts(); however,
  * documentation already instructs users not to use that for basic writes.
  */
-static bool
+static mongoc_cmd_parts_allow_txn_number_t
 _allow_txn_number (const mongoc_cmd_parts_t *parts,
                    const mongoc_server_stream_t *server_stream)
 {
@@ -468,18 +468,18 @@ _allow_txn_number (const mongoc_cmd_parts_t *parts,
                 MONGOC_CMD_PARTS_ALLOW_TXN_NUMBER_UNKNOWN);
 
    if (!parts->is_write_command) {
-      return false;
+      return MONGOC_CMD_PARTS_ALLOW_TXN_NUMBER_NO;
    }
 
    if (server_stream->sd->max_wire_version < WIRE_VERSION_RETRY_WRITES) {
-      return false;
+      return MONGOC_CMD_PARTS_ALLOW_TXN_NUMBER_NO;
    }
 
    if (!strcasecmp (parts->assembled.command_name, "findandmodify")) {
-      return true;
+      return MONGOC_CMD_PARTS_ALLOW_TXN_NUMBER_YES;
    }
 
-   return false;
+   return MONGOC_CMD_PARTS_ALLOW_TXN_NUMBER_NO;
 }
 
 
