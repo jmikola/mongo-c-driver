@@ -695,11 +695,7 @@ _mongoc_handshake_build_doc_with_application (const char *appname)
                     doc (kv ("name", cstr (env_name)),
                          if (md->env_timeout_sec.set, then (kv ("timeout_sec", int32 (md->env_timeout_sec.value)))),
                          if (md->env_memory_mb.set, then (kv ("memory_mb", int32 (md->env_memory_mb.value)))),
-                         if (md->env_region, then (kv ("region", cstr (md->env_region)))))))),
-      if (md->kubernetes || md->docker,
-          then (kv ("container",
-                    doc (if (md->docker, then (kv ("runtime", cstr ("docker")))),
-                         if (md->kubernetes, then (kv ("orchestrator", cstr ("kubernetes")))))))));
+                         if (md->env_region, then (kv ("region", cstr (md->env_region)))))))));
 
    if (md->platform) {
       _append_platform_field (doc, md->platform, false);
